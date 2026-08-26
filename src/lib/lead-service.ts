@@ -157,6 +157,40 @@ function processEnquiryAI(leadId: string, conversationId: string) {
     duration: 80,
   });
 
+  const lead = store.getLead(leadId);
+  const customerName = lead?.contactName || "there";
+  const knownParts: string[] = [];
+  if (requirements.productName) knownParts.push(requirements.productName);
+  if (requirements.material) knownParts.push(requirements.material);
+  if (requirements.quantity) knownParts.push(`${requirements.quantity} nos`);
+  if (requirements.size) knownParts.push(`size ${requirements.size}`);
+  if (requirements.pressureClass) knownParts.push(requirements.pressureClass);
+  if (requirements.application) knownParts.push(requirements.application);
+  if (requirements.deliveryLocation) knownParts.push(`delivery to ${requirements.deliveryLocation}`);
+
+  const missingParts: string[] = [];
+  if (!requirements.productName) missingParts.push("product type");
+  if (!requirements.material) missingParts.push("material grade");
+  if (!requirements.quantity) missingParts.push("quantity");
+  if (!requirements.size) missingParts.push("size");
+
+  let aiReply: string;
+  if (requirements.completeness > 60) {
+    aiReply = `Thank you ${customerName}! I have noted your requirements: ${knownParts.join(", ")}. I am preparing a quotation for you. Our team will share it shortly.`;
+  } else if (knownParts.length > 0 && missingParts.length > 0) {
+    aiReply = `Thank you ${customerName}! I noted ${knownParts.join(", ")}. Could you please confirm the ${missingParts.join(" and ")}?`;
+  } else {
+    aiReply = `Thank you ${customerName} for your enquiry. Could you share more details about the product type, material, quantity, and size you need?`;
+  }
+
+  store.createMessage({
+    conversationId,
+    leadId,
+    direction: MessageDirection.OUTBOUND,
+    content: aiReply,
+    channel: lastMessage.channel,
+  });
+
   if (requirements.completeness > 60) {
     generateQuotation(leadId, rfq.id);
   }

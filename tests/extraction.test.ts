@@ -48,9 +48,10 @@ describe("Lead Extraction & Webhook Processing", () => {
     expect(conversation.channel).toBe("INDIAMART");
 
     const messages = store.getMessagesByLead(lead.id);
-    expect(messages.length).toBe(1);
+    expect(messages.length).toBe(2);
     expect(messages[0].direction).toBe(MessageDirection.INBOUND);
     expect(messages[0].content).toContain("SS304 Ball Valves");
+    expect(messages[1].direction).toBe(MessageDirection.OUTBOUND);
 
     const rfqs = store.getRFQsByLead(lead.id);
     expect(rfqs.length).toBe(1);
