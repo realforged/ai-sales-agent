@@ -254,7 +254,13 @@ export default function Dashboard() {
               <p className="text-xs text-slate-500">Manufacturing Lead Management</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">
+              Demo Mode
+            </span>
+            <span className="text-[10px] font-medium bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+              Mock AI · No API Keys
+            </span>
             <div className="text-xs text-slate-500">
               {new Date(data.currentTime).toLocaleDateString("en-IN", {
                 weekday: "short",
