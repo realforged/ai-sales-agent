@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { getLeadDetail, respondToLead } from "@/lib/lead-service";
+import { getStore } from "@/lib/store";
+import { approveQuotation, sendQuotation } from "@/lib/lead-service";
 
 interface LeadDetailData {
   lead: {
@@ -137,9 +140,10 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch(`/api/leads/${leadId}`);
-      const result = await res.json();
-      setData(result);
+      const result = getLeadDetail(leadId);
+      if (result) {
+        setData(result as unknown as LeadDetailData);
+      }
     } catch (error) {
       console.error("Failed to fetch lead detail:", error);
     } finally {
@@ -155,11 +159,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
     if (!responseMessage.trim()) return;
     setSendingResponse(true);
     try {
-      await fetch(`/api/leads/${leadId}/respond`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: responseMessage }),
-      });
+      respondToLead(leadId, responseMessage);
       setResponseMessage("");
       await fetchData();
     } catch (error) {
@@ -169,18 +169,18 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
     }
   };
 
-  const approveQuotation = async (quotationId: string) => {
+  const handleApproveQuotation = async (quotationId: string) => {
     try {
-      await fetch(`/api/quotation/${quotationId}/approve`, { method: "POST" });
+      approveQuotation(quotationId);
       await fetchData();
     } catch (error) {
       console.error("Failed to approve quotation:", error);
     }
   };
 
-  const sendQuotation = async (quotationId: string) => {
+  const handleSendQuotation = async (quotationId: string) => {
     try {
-      await fetch(`/api/quotation/${quotationId}/send`, { method: "POST" });
+      sendQuotation(quotationId);
       await fetchData();
     } catch (error) {
       console.error("Failed to send quotation:", error);
@@ -189,10 +189,11 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
 
   const resolveEscalation = async (escalationId: string) => {
     try {
-      await fetch(`/api/demo`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "resolve_escalation", escalationId }),
+      const store = getStore();
+      store.updateEscalation(escalationId, {
+        status: "RESOLVED" as any,
+        resolvedBy: "MANAGER",
+        resolvedAt: store.getCurrentTime(),
       });
       await fetchData();
     } catch (error) {
@@ -449,7 +450,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
                 {latestQuotation.status === "PENDING_APPROVAL" && (
                   <div className="mt-4 flex gap-2">
                     <button
-                      onClick={() => approveQuotation(latestQuotation.id)}
+                      onClick={() => handleApproveQuotation(latestQuotation.id)}
                       className="flex-1 text-xs font-medium bg-emerald-600 text-white px-3 py-1.5 rounded-md hover:bg-emerald-700 transition-colors"
                     >
                       Approve
@@ -465,7 +466,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
                 {latestQuotation.status === "APPROVED" && (
                   <div className="mt-4">
                     <button
-                      onClick={() => sendQuotation(latestQuotation.id)}
+                      onClick={() => handleSendQuotation(latestQuotation.id)}
                       className="w-full text-xs font-medium bg-slate-900 text-white px-3 py-1.5 rounded-md hover:bg-slate-800 transition-colors"
                     >
                       Send Quotation

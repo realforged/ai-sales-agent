@@ -2,6 +2,16 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { formatCurrency } from "@/lib/utils";
+import { getStore } from "@/lib/store";
+import {
+  getDashboardMetrics,
+  getAIRecommendations,
+  runDemoScenario,
+  archiveLead,
+  restoreLead,
+  getAllLeadsSummary,
+} from "@/lib/lead-service";
+import { LeadStatus } from "@/types";
 
 interface MetricCard {
   label: string;
@@ -87,29 +97,19 @@ export default function Dashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [leadsRes, metricsRes, recsRes] = await Promise.all([
-        fetch("/api/leads"),
-        fetch("/api/demo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "get_metrics" }),
-        }),
-        fetch("/api/demo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "get_recommendations" }),
-        }),
-      ]);
-
-      const leadsData = await leadsRes.json();
-      const metricsData = await metricsRes.json();
-      const recsData = await recsRes.json();
+      const store = getStore();
+      const metrics = getDashboardMetrics();
+      const leads = getAllLeadsSummary();
+      const recommendations = getAIRecommendations();
 
       setData({
-        metrics: metricsData,
-        leads: leadsData.leads || [],
-        recommendations: recsData.recommendations || [],
-        currentTime: metricsData.currentTime || new Date().toISOString(),
+        metrics,
+        leads: leads.map((l) => ({
+          ...l,
+          createdAt: l.createdAt instanceof Date ? l.createdAt.toISOString() : String(l.createdAt),
+        })),
+        recommendations,
+        currentTime: store.getCurrentTime().toISOString(),
       });
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error);
@@ -120,13 +120,20 @@ export default function Dashboard() {
 
   const fetchArchived = useCallback(async () => {
     try {
-      const res = await fetch("/api/demo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "get_archived" }),
-      });
-      const result = await res.json();
-      setArchivedLeads(result.leads || []);
+      const store = getStore();
+      const archived = store.leads
+        .filter((l) => l.status === LeadStatus.ARCHIVED)
+        .map((lead) => {
+          const company = lead.companyId ? store.getCompany(lead.companyId) : null;
+          return {
+            id: lead.id,
+            contactName: lead.contactName,
+            companyName: company?.name || "Unknown",
+            source: lead.source,
+            archivedAt: lead.updatedAt instanceof Date ? lead.updatedAt.toISOString() : String(lead.updatedAt),
+          };
+        });
+      setArchivedLeads(archived);
     } catch {}
   }, []);
 
@@ -144,12 +151,7 @@ export default function Dashboard() {
     setIsRunning(true);
     setStatusMessage("Running scenario...");
     try {
-      const res = await fetch("/api/demo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "run_scenario", scenarioId: parseInt(selectedScenario) }),
-      });
-      const result = await res.json();
+      const result = runDemoScenario(parseInt(selectedScenario));
       setStatusMessage(`Scenario completed: ${result.scenario} (${result.steps?.length || 0} steps)`);
       await fetchData();
     } catch {
@@ -163,13 +165,9 @@ export default function Dashboard() {
     setIsRunning(true);
     setStatusMessage(`Advancing time by ${days} day(s)...`);
     try {
-      const res = await fetch("/api/demo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "advance_time", days }),
-      });
-      const result = await res.json();
-      setStatusMessage(`Time advanced. Current: ${new Date(result.currentTime).toLocaleDateString("en-IN")}`);
+      const store = getStore();
+      store.advanceTime(days);
+      setStatusMessage(`Time advanced. Current: ${store.getCurrentTime().toLocaleDateString("en-IN")}`);
       await fetchData();
     } catch {
       setStatusMessage("Failed to advance time");
@@ -182,11 +180,8 @@ export default function Dashboard() {
     setIsRunning(true);
     setStatusMessage("Resetting all data...");
     try {
-      await fetch("/api/demo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reset" }),
-      });
+      const store = getStore();
+      store.reset();
       setStatusMessage("Data reset complete");
       setArchivedLeads([]);
       setShowArchived(false);
@@ -198,13 +193,9 @@ export default function Dashboard() {
     }
   };
 
-  const archiveLead = async (leadId: string) => {
+  const handleArchiveLead = async (leadId: string) => {
     try {
-      await fetch("/api/demo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "archive_lead", leadId }),
-      });
+      archiveLead(leadId);
       setArchiveConfirm(null);
       setStatusMessage("Lead archived");
       await fetchData();
@@ -214,13 +205,9 @@ export default function Dashboard() {
     }
   };
 
-  const restoreLead = async (leadId: string) => {
+  const handleRestoreLead = async (leadId: string) => {
     try {
-      await fetch("/api/demo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "restore_lead", leadId }),
-      });
+      restoreLead(leadId);
       setStatusMessage("Lead restored to active pipeline");
       await fetchData();
       await fetchArchived();
@@ -560,7 +547,7 @@ export default function Dashboard() {
                 Cancel
               </button>
               <button
-                onClick={() => archiveLead(archiveConfirm.leadId)}
+                onClick={() => handleArchiveLead(archiveConfirm.leadId)}
                 className="text-xs font-medium bg-red-600 text-white px-4 py-1.5 rounded-md hover:bg-red-700 transition-colors"
               >
                 Archive

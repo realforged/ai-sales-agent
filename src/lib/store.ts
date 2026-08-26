@@ -71,6 +71,7 @@ class DataStore {
       updatedAt: now,
     };
     this.companies.push(company);
+    this.persist();
     return company;
   }
 
@@ -87,6 +88,7 @@ class DataStore {
       id,
       updatedAt: this.getCurrentTime(),
     };
+    this.persist();
     return this.companies[idx];
   }
 
@@ -100,6 +102,7 @@ class DataStore {
       updatedAt: now,
     };
     this.leads.push(lead);
+    this.persist();
     return lead;
   }
 
@@ -120,6 +123,7 @@ class DataStore {
       id,
       updatedAt: this.getCurrentTime(),
     };
+    this.persist();
     return this.leads[idx];
   }
 
@@ -133,6 +137,7 @@ class DataStore {
       updatedAt: now,
     };
     this.conversations.push(conversation);
+    this.persist();
     return conversation;
   }
 
@@ -153,6 +158,7 @@ class DataStore {
       id,
       updatedAt: this.getCurrentTime(),
     };
+    this.persist();
     return this.conversations[idx];
   }
 
@@ -169,6 +175,7 @@ class DataStore {
       lastMessageAt: now,
       messageCount: (this.getConversation(data.conversationId)?.messageCount ?? 0) + 1,
     });
+    this.persist();
     return message;
   }
 
@@ -190,6 +197,7 @@ class DataStore {
       updatedAt: now,
     };
     this.rfqs.push(rfq);
+    this.persist();
     return rfq;
   }
 
@@ -210,6 +218,7 @@ class DataStore {
       id,
       updatedAt: this.getCurrentTime(),
     };
+    this.persist();
     return this.rfqs[idx];
   }
 
@@ -223,6 +232,7 @@ class DataStore {
       updatedAt: now,
     };
     this.rfqFields.push(field);
+    this.persist();
     return field;
   }
 
@@ -239,6 +249,7 @@ class DataStore {
       id,
       updatedAt: this.getCurrentTime(),
     };
+    this.persist();
     return this.rfqFields[idx];
   }
 
@@ -252,6 +263,7 @@ class DataStore {
       updatedAt: now,
     };
     this.products.push(product);
+    this.persist();
     return product;
   }
 
@@ -285,6 +297,7 @@ class DataStore {
       updatedAt: now,
     };
     this.quotations.push(quotation);
+    this.persist();
     return quotation;
   }
 
@@ -305,6 +318,7 @@ class DataStore {
       id,
       updatedAt: this.getCurrentTime(),
     };
+    this.persist();
     return this.quotations[idx];
   }
 
@@ -318,6 +332,7 @@ class DataStore {
       updatedAt: now,
     };
     this.quotationItems.push(item);
+    this.persist();
     return item;
   }
 
@@ -335,6 +350,7 @@ class DataStore {
       updatedAt: now,
     };
     this.followUps.push(followUp);
+    this.persist();
     return followUp;
   }
 
@@ -355,6 +371,7 @@ class DataStore {
       id,
       updatedAt: this.getCurrentTime(),
     };
+    this.persist();
     return this.followUps[idx];
   }
 
@@ -368,6 +385,7 @@ class DataStore {
       updatedAt: now,
     };
     this.escalations.push(escalation);
+    this.persist();
     return escalation;
   }
 
@@ -388,6 +406,7 @@ class DataStore {
       id,
       updatedAt: this.getCurrentTime(),
     };
+    this.persist();
     return this.escalations[idx];
   }
 
@@ -398,6 +417,7 @@ class DataStore {
       ...data,
     };
     this.aiActions.push(action);
+    this.persist();
     return action;
   }
 
@@ -421,11 +441,61 @@ class DataStore {
     this.aiActions = [];
     this.resetTime();
     this.seed();
+    this.persist();
   }
 
   seed(): void {
     this.seedProducts();
     this.seedCompany();
+  }
+
+  // Persistence for client-side (localStorage)
+  persist(): void {
+    if (typeof window === "undefined") return;
+    try {
+      const data = {
+        companies: this.companies,
+        leads: this.leads,
+        conversations: this.conversations,
+        messages: this.messages,
+        rfqs: this.rfqs,
+        rfqFields: this.rfqFields,
+        products: this.products,
+        quotations: this.quotations,
+        quotationItems: this.quotationItems,
+        followUps: this.followUps,
+        escalations: this.escalations,
+        aiActions: this.aiActions,
+        currentTime: this.currentTime.toISOString(),
+      };
+      window.localStorage.setItem("ai-sales-agent-store", JSON.stringify(data));
+    } catch {
+      // localStorage full or unavailable — silent fail
+    }
+  }
+
+  hydrate(): void {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem("ai-sales-agent-store");
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      this.companies = data.companies || [];
+      this.leads = data.leads || [];
+      this.conversations = data.conversations || [];
+      this.messages = data.messages || [];
+      this.rfqs = data.rfqs || [];
+      this.rfqFields = data.rfqFields || [];
+      this.products = data.products || [];
+      this.quotations = data.quotations || [];
+      this.quotationItems = data.quotationItems || [];
+      this.followUps = data.followUps || [];
+      this.escalations = data.escalations || [];
+      this.aiActions = data.aiActions || [];
+      if (data.currentTime) this.currentTime = new Date(data.currentTime);
+    } catch {
+      // Corrupted data — start fresh
+    }
   }
 
   private seedCompany(): void {
@@ -625,7 +695,17 @@ const globalForStore = globalThis as unknown as {
 export function getStore(): DataStore {
   if (!globalForStore.__dataStore) {
     globalForStore.__dataStore = new DataStore();
-    globalForStore.__dataStore.seed();
+    if (typeof window !== "undefined") {
+      const raw = window.localStorage.getItem("ai-sales-agent-store");
+      if (raw) {
+        globalForStore.__dataStore.hydrate();
+      } else {
+        globalForStore.__dataStore.seed();
+        globalForStore.__dataStore.persist();
+      }
+    } else {
+      globalForStore.__dataStore.seed();
+    }
   }
   return globalForStore.__dataStore;
 }
